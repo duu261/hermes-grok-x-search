@@ -24,7 +24,9 @@ MAX_RESULT_CHARS = 100_000
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
 STRICT_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 X_CITATION_HOSTS = {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}
-X_URL_PATTERN = re.compile(r"https://(?:www\.)?(?:x\.com|twitter\.com)/[^\s)\]>]+")
+X_URL_PATTERN = re.compile(
+    r"https://(?:www\.)?(?:x\.com|twitter\.com)/[^\s)\]>]+", re.IGNORECASE
+)
 
 
 class _FilterViolationError(ValueError):
