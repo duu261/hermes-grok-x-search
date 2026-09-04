@@ -1,0 +1,15 @@
+name: grok-x-search
+version: 0.1.0
+description: "Citation-aware X Search through a Responses-compatible Grok gateway."
+author: Duu
+kind: standalone
+platforms:
+  - linux
+  - macos
+  - windows
+provides_tools:
+  - grok_x_search
+requires_env:
+  - name: GROK_X_SEARCH_API_KEY
+    description: "API key for the configured Responses-compatible gateway"
+    secret: true
