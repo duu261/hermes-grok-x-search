@@ -1,6 +1,9 @@
 import unittest
 
-from hermes_e2e_runner import main
+try:
+    from .hermes_e2e_runner import main
+except ImportError:
+    from hermes_e2e_runner import main
 
 
 class HermesRuntimeE2ETest(unittest.TestCase):

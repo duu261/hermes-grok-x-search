@@ -396,9 +396,7 @@ class ResponseTests(unittest.TestCase):
                 "output": [
                     {
                         "type": "x_search_call",
-                        "action": {
-                            "sources": [{"url": "https://x.com/OpenAI/status/1"}]
-                        },
+                        "action": {"sources": [{"url": "https://x.com/OpenAI/status/1"}]},
                     },
                     {
                         "type": "message",
