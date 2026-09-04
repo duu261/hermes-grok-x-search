@@ -474,6 +474,19 @@ class ResponseTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertFalse(result["degraded"])
 
+    def test_normalize_response_rejects_mixed_case_disallowed_url_in_answer(self):
+        provider = load_provider()
+        with self.assertRaisesRegex(ValueError, "allowed handle filter"):
+            provider.normalize_response(
+                {
+                    "status": "completed",
+                    "output_text": "See HTTPS://X.COM/sama/status/1",
+                },
+                model="grok-4.5",
+                query="test",
+                allowed_x_handles=["OpenAI"],
+            )
+
     def test_normalize_response_rejects_non_string_text(self):
         provider = load_provider()
         with self.assertRaisesRegex(TypeError, "output_text"):

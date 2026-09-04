@@ -1,5 +1,5 @@
 name: grok-x-search
-version: 0.1.5
+version: 0.1.6
 description: "Citation-aware X Search through a Responses-compatible Grok gateway."
 author: Duu
 kind: standalone
