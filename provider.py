@@ -9,11 +9,11 @@ import re
 import time
 import urllib.error
 import urllib.request
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
-MAX_HANDLES = 20
+MAX_HANDLES = 10
 REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "::1"}
 DEFAULT_MODEL = "grok-4.5"
@@ -92,6 +92,8 @@ def _validate_dates(from_date: str, to_date: str) -> None:
     end = _parse_date(to_date, "to_date") if to_date else None
     if start and end and start > end:
         raise ValueError("from_date must be on or before to_date")
+    if start and start > datetime.now(timezone.utc).date():
+        raise ValueError("from_date must not be in the future")
 
 
 def _normalize_handles(handles: list[str] | None, field_name: str) -> list[str]:
@@ -168,9 +170,22 @@ def build_payload(
     if enable_video_understanding:
         tool["enable_video_understanding"] = True
 
+    prompt = query
+    if allowed:
+        handles = ", ".join(f"@{handle}" for handle in allowed)
+        prompt += (
+            f"\n\nStrict source constraint: Only cite and discuss posts authored by: {handles}. "
+            "Do not include related or quoted accounts."
+        )
+    elif excluded:
+        handles = ", ".join(f"@{handle}" for handle in excluded)
+        prompt += (
+            f"\n\nStrict source constraint: Do not cite or discuss posts authored by: {handles}."
+        )
+
     payload: dict[str, Any] = {
         "model": model.strip(),
-        "input": [{"role": "user", "content": query}],
+        "input": [{"role": "user", "content": prompt}],
         "tools": [tool],
         "store": False,
     }
@@ -249,7 +264,13 @@ def _response_text(data: dict[str, Any]) -> str:
     return "\n\n".join(parts)
 
 
-def normalize_response(data: dict[str, Any], *, model: str, query: str) -> dict[str, Any]:
+def normalize_response(
+    data: dict[str, Any],
+    *,
+    model: str,
+    query: str,
+    active_filters: list[str] | None = None,
+) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("upstream response is not an object")
     if data.get("error"):
@@ -293,13 +314,10 @@ def normalize_response(data: dict[str, Any], *, model: str, query: str) -> dict[
                     }
                 )
 
-    output_types: list[str] = []
     for item in output:
         if not isinstance(item, dict):
             continue
         item_type = _optional_text(item.get("type"), "output type")
-        if item_type:
-            output_types.append(item_type)
         action = item.get("action")
         if isinstance(action, dict):
             for source in _array(action.get("sources"), "action sources"):
@@ -324,21 +342,24 @@ def normalize_response(data: dict[str, Any], *, model: str, query: str) -> dict[
                         }
                     )
 
-    degraded = not bool(urls)
+    filters = active_filters or []
+    degraded = bool(filters) and not bool(urls)
     return {
         "success": True,
         "provider": "grok-responses",
+        "credential_source": "gateway",
         "tool": "grok_x_search",
         "model": model,
         "query": query,
         "answer": answer,
         "citations": citations,
         "inline_citations": inline,
-        "citation_urls": urls,
-        "output_types": output_types,
-        "search_call_detected": "x_search_call" in output_types,
         "degraded": degraded,
-        "degraded_reason": "no citations returned" if degraded else None,
+        "degraded_reason": (
+            f"no citations returned despite filters: {', '.join(filters)}"
+            if degraded
+            else None
+        ),
     }
 
 
@@ -474,7 +495,23 @@ def grok_x_search(
                     request_id=request_id,
                 )
             try:
-                result = normalize_response(data, model=model, query=str(query or "").strip())
+                tool_def = payload["tools"][0]
+                active_filters = [
+                    name
+                    for name in (
+                        "allowed_x_handles",
+                        "excluded_x_handles",
+                        "from_date",
+                        "to_date",
+                    )
+                    if tool_def.get(name)
+                ]
+                result = normalize_response(
+                    data,
+                    model=model,
+                    query=str(query or "").strip(),
+                    active_filters=active_filters,
+                )
             except (TypeError, ValueError) as exc:
                 return _failure("malformed_response", str(exc), request_id=request_id)
             if request_id:

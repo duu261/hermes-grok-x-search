@@ -41,8 +41,19 @@ class GrokXSearchLiveTests(unittest.TestCase):
 
         self.assertTrue(result.get("success"), result.get("error_type"))
         self.assertFalse(result.get("degraded"), "gateway returned no citations")
-        urls = result.get("citation_urls") or []
+        urls = [
+            citation.get("url", "")
+            for citation in (result.get("citations") or [])
+            if isinstance(citation, dict)
+        ]
+        urls.extend(
+            citation.get("url", "")
+            for citation in (result.get("inline_citations") or [])
+            if isinstance(citation, dict)
+        )
         self.assertTrue(any("x.com/" in url for url in urls), "no X citation URL returned")
+        self.assertNotIn("@sama", result.get("answer", "").lower())
+        self.assertNotIn("x.com/sama/status/", result.get("answer", "").lower())
 
 
 if __name__ == "__main__":

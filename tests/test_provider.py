@@ -5,6 +5,7 @@ import json
 import sys
 import unittest
 import urllib.error
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -62,7 +63,19 @@ class PayloadTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["model"], "grok-4.6")
-        self.assertEqual(payload["input"], [{"role": "user", "content": "Find recent Grok posts"}])
+        self.assertEqual(
+            payload["input"],
+            [
+                {
+                    "role": "user",
+                    "content": (
+                        "Find recent Grok posts\n\nStrict source constraint: Only cite and "
+                        "discuss posts authored by: @xai, @grok. Do not include related or "
+                        "quoted accounts."
+                    ),
+                }
+            ],
+        )
         self.assertEqual(
             payload["tools"],
             [
@@ -76,6 +89,32 @@ class PayloadTests(unittest.TestCase):
         self.assertIs(payload["store"], False)
         self.assertNotIn("api_key", json.dumps(payload).lower())
 
+    def test_build_payload_reinforces_allowed_handle_filter(self):
+        provider = load_provider()
+
+        payload = provider.build_payload(
+            query="Find recent posts",
+            model="grok-4.5",
+            allowed_x_handles=["@OpenAI"],
+        )
+
+        prompt = payload["input"][0]["content"]
+        self.assertIn("Find recent posts", prompt)
+        self.assertIn("Only cite and discuss posts authored by: @OpenAI", prompt)
+        self.assertIn("Do not include related or quoted accounts", prompt)
+
+    def test_build_payload_reinforces_excluded_handle_filter(self):
+        provider = load_provider()
+
+        payload = provider.build_payload(
+            query="Find recent posts",
+            model="grok-4.5",
+            excluded_x_handles=["@spam"],
+        )
+
+        prompt = payload["input"][0]["content"]
+        self.assertIn("Do not cite or discuss posts authored by: @spam", prompt)
+
     def test_build_payload_rejects_conflicting_handle_filters(self):
         provider = load_provider()
         with self.assertRaisesRegex(ValueError, "cannot be used together"):
@@ -86,13 +125,13 @@ class PayloadTests(unittest.TestCase):
                 excluded_x_handles=["spam"],
             )
 
-    def test_build_payload_rejects_more_than_twenty_handles(self):
+    def test_build_payload_rejects_more_than_ten_handles(self):
         provider = load_provider()
-        with self.assertRaisesRegex(ValueError, "at most 20"):
+        with self.assertRaisesRegex(ValueError, "at most 10"):
             provider.build_payload(
                 query="test",
                 model="grok-4.6",
-                allowed_x_handles=[f"user{i}" for i in range(21)],
+                allowed_x_handles=[f"user{i}" for i in range(11)],
             )
 
     def test_build_payload_rejects_non_array_handles(self):
@@ -141,6 +180,13 @@ class PayloadTests(unittest.TestCase):
                     model="grok-4.6",
                     from_date=invalid_date,
                 )
+        future_date = (datetime.now(timezone.utc).date() + timedelta(days=1)).isoformat()
+        with self.assertRaisesRegex(ValueError, "in the future"):
+            provider.build_payload(
+                query="test",
+                model="grok-4.6",
+                from_date=future_date,
+            )
         with self.assertRaisesRegex(ValueError, "reasoning_effort"):
             provider.build_payload(
                 query="test",
@@ -186,7 +232,54 @@ class EndpointTests(unittest.TestCase):
 
 
 class ResponseTests(unittest.TestCase):
-    def test_normalize_response_accepts_citations_without_search_call_item(self):
+    def test_normalize_response_matches_native_result_shape(self):
+        provider = load_provider()
+        result = provider.normalize_response(
+            {
+                "status": "completed",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": "Found one post.",
+                                "annotations": [
+                                    {
+                                        "type": "url_citation",
+                                        "url": "https://x.com/OpenAI/status/1",
+                                        "title": "OpenAI",
+                                        "start_index": 0,
+                                        "end_index": 5,
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+            model="grok-4.5",
+            query="test",
+        )
+
+        self.assertEqual(
+            set(result),
+            {
+                "success",
+                "provider",
+                "credential_source",
+                "tool",
+                "model",
+                "query",
+                "answer",
+                "citations",
+                "inline_citations",
+                "degraded",
+                "degraded_reason",
+            },
+        )
+
+    def test_normalize_response_preserves_top_level_and_inline_citations(self):
         provider = load_provider()
         data = {
             "status": "completed",
@@ -222,16 +315,19 @@ class ResponseTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["answer"], "Found posts.")
         self.assertEqual(
-            result["citation_urls"],
+            result["citations"],
             [
-                "https://x.com/xai/status/1",
-                "https://x.com/grok/status/2",
+                {"url": "https://x.com/xai/status/1", "title": ""},
+                {"url": "https://x.com/grok/status/2", "title": "Grok"},
             ],
         )
-        self.assertFalse(result["search_call_detected"])
+        self.assertEqual(
+            [citation["url"] for citation in result["inline_citations"]],
+            ["https://x.com/xai/status/1"],
+        )
         self.assertFalse(result["degraded"])
 
-    def test_normalize_response_marks_uncited_answer_degraded(self):
+    def test_normalize_response_matches_native_unfiltered_degraded_semantics(self):
         provider = load_provider()
         data = {
             "status": "completed",
@@ -246,8 +342,8 @@ class ResponseTests(unittest.TestCase):
         result = provider.normalize_response(data, model="grok-4.6", query="test")
 
         self.assertTrue(result["success"])
-        self.assertTrue(result["degraded"])
-        self.assertEqual(result["degraded_reason"], "no citations returned")
+        self.assertFalse(result["degraded"])
+        self.assertIsNone(result["degraded_reason"])
 
     def test_normalize_response_rejects_non_string_text(self):
         provider = load_provider()
@@ -330,7 +426,10 @@ class ResponseTests(unittest.TestCase):
             model="grok-4.6",
             query="test",
         )
-        self.assertEqual(result["citation_urls"], ["https://x.com/xai/status/1"])
+        self.assertEqual(
+            result["citations"],
+            [{"url": "https://x.com/xai/status/1", "title": ""}],
+        )
         self.assertFalse(result["degraded"])
 
     def test_normalize_response_rejects_error_envelope_and_empty_answer(self):
@@ -425,6 +524,8 @@ class RegistrationTests(unittest.TestCase):
         registered = calls[0]
         self.assertEqual(registered["name"], "grok_x_search")
         properties = registered["schema"]["parameters"]["properties"]
+        self.assertEqual(properties["allowed_x_handles"]["maxItems"], 10)
+        self.assertEqual(properties["excluded_x_handles"]["maxItems"], 10)
         self.assertEqual(
             set(properties),
             {
@@ -438,6 +539,8 @@ class RegistrationTests(unittest.TestCase):
             },
         )
         self.assertEqual(registered["schema"]["parameters"]["required"], ["query"])
+        self.assertIn("inline_citations", registered["schema"]["description"])
+        self.assertIn("degraded is false", registered["schema"]["description"])
         self.assertNotIn("tools", properties)
         self.assertNotIn("input", properties)
         self.assertNotIn("reasoning", properties)
