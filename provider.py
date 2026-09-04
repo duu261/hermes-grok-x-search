@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 MAX_HANDLES = 10
+HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_]{1,15}$")
 REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "::1"}
 DEFAULT_MODEL = "grok-4.5"
@@ -106,6 +107,8 @@ def _normalize_handles(handles: list[str] | None, field_name: str) -> list[str]:
         value = handle.strip().lstrip("@")
         if not value:
             raise ValueError(f"{field_name} entries must not be blank")
+        if not HANDLE_PATTERN.fullmatch(value):
+            raise ValueError(f"{field_name} entries must be valid X handles")
         cleaned.append(value)
     if len(cleaned) > MAX_HANDLES:
         raise ValueError(f"{field_name} supports at most {MAX_HANDLES} handles")
@@ -318,11 +321,6 @@ def normalize_response(
         if not isinstance(item, dict):
             continue
         item_type = _optional_text(item.get("type"), "output type")
-        action = item.get("action")
-        if isinstance(action, dict):
-            for source in _array(action.get("sources"), "action sources"):
-                if isinstance(source, dict):
-                    add_url(source.get("url"))
         if item_type != "message":
             continue
         for content in _array(item.get("content"), "message content"):
