@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 MAX_HANDLES = 20
 REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "::1"}
-DEFAULT_MODEL = "grok-4.6"
+DEFAULT_MODEL = "grok-4.5"
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")

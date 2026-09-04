@@ -27,7 +27,7 @@ class GrokXSearchLiveTests(unittest.TestCase):
         self.assertTrue(base_url, "GROK_X_SEARCH_LIVE_BASE_URL is required")
         config = {
             "base_url": base_url,
-            "model": os.getenv("GROK_X_SEARCH_LIVE_MODEL", "grok-4.6"),
+            "model": os.getenv("GROK_X_SEARCH_LIVE_MODEL", "grok-4.5"),
             "timeout_seconds": 180,
             "retries": 1,
         }
