@@ -24,9 +24,7 @@ MAX_RESULT_CHARS = 100_000
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
 STRICT_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 X_CITATION_HOSTS = {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}
-X_URL_PATTERN = re.compile(
-    r"https://(?:www\.)?(?:x\.com|twitter\.com)/[^\s)\]>]+", re.IGNORECASE
-)
+X_URL_PATTERN = re.compile(r"https://(?:www\.)?(?:x\.com|twitter\.com)/[^\s)\]>]+", re.IGNORECASE)
 
 
 class _FilterViolationError(ValueError):
@@ -207,9 +205,7 @@ def build_payload(
             "Do not include related or quoted accounts."
         )
     elif excluded:
-        payload["instructions"] = (
-            f"Do not cite or discuss posts authored by: {handles}."
-        )
+        payload["instructions"] = f"Do not cite or discuss posts authored by: {handles}."
     if effort:
         payload["reasoning"] = {"effort": effort}
     return payload
@@ -399,9 +395,7 @@ def normalize_response(
         "inline_citations": inline,
         "degraded": degraded,
         "degraded_reason": (
-            f"no citations returned despite filters: {', '.join(filters)}"
-            if degraded
-            else None
+            f"no citations returned despite filters: {', '.join(filters)}" if degraded else None
         ),
     }
 
@@ -502,7 +496,7 @@ def grok_x_search(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "Hermes-Grok-X-Search/0.1.3",
+            "User-Agent": "Hermes-Grok-X-Search/0.1.6",
         },
         method="POST",
     )
