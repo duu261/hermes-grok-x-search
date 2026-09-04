@@ -10,9 +10,11 @@ GROK_X_SEARCH_SCHEMA = {
     "name": "grok_x_search",
     "description": (
         "Search public X posts, profiles, and threads through a pooled Grok "
-        "Responses gateway. Returns a synthesized answer and citations. "
-        "Read-only discovery only; never use for posting, replies, likes, DMs, "
-        "or other authenticated X actions."
+        "Responses gateway. Returns a synthesized answer plus citations and "
+        "inline_citations. Treat the result as X-grounded when degraded is false "
+        "and either citation field contains valid X post URLs. Read-only discovery "
+        "only; never use for posting, replies, likes, DMs, or other authenticated "
+        "X actions."
     ),
     "parameters": {
         "type": "object",
@@ -24,7 +26,7 @@ GROK_X_SEARCH_SCHEMA = {
             "allowed_x_handles": {
                 "type": "array",
                 "items": {"type": "string"},
-                "maxItems": 20,
+                "maxItems": 10,
                 "description": (
                     "Only consider posts from these X handles. Cannot be combined "
                     "with excluded_x_handles."
@@ -33,7 +35,7 @@ GROK_X_SEARCH_SCHEMA = {
             "excluded_x_handles": {
                 "type": "array",
                 "items": {"type": "string"},
-                "maxItems": 20,
+                "maxItems": 10,
                 "description": (
                     "Exclude posts from these X handles. Cannot be combined with allowed_x_handles."
                 ),

@@ -18,15 +18,16 @@ Version 0.1 scope is locked to xAI server-side `x_search` only. Do not add gener
 ## Contracts
 
 - Public tool inputs mirror xAI X Search controls: query, handle filters, date range, image understanding, and video understanding.
-- Maximum 20 allowed or excluded handles. The two filters are mutually exclusive.
+- Maximum 10 allowed or excluded handles, matching native Hermes `x_search`. The two filters are mutually exclusive.
 - Non-secret settings live under `grok_x_search` in Hermes config. Only `GROK_X_SEARCH_API_KEY` belongs in the private environment.
 - Remote endpoints require HTTPS. Loopback HTTP is allowed for development.
 - Refuse redirects so bearer credentials cannot cross origins.
 - Never return credentials, authorization headers, request bodies, endpoint URLs, raw upstream bodies, or backend traces.
 - Cap response size and retry delay. Retry only transient HTTP failures.
-- A citation-backed answer is valid even when a gateway omits the `x_search_call` output item.
+- Keep the model-facing result aligned with native Hermes `x_search`; do not expose gateway-internal output types or search-call detector flags.
+- A citation-backed answer is valid when `degraded` is false and either `citations` or `inline_citations` contains validated X URLs.
 - Retain only HTTPS citation URLs on `x.com` or `twitter.com`; never return userinfo or arbitrary hosts.
-- A successful answer without citations must be marked `degraded: true`.
+- Match native degraded semantics: only filtered answers without citations are marked `degraded: true`.
 - HTTP 200 error envelopes and empty answers are failures.
 - Keep tool name `grok_x_search` to avoid overriding Hermes core `x_search`.
 
@@ -36,7 +37,7 @@ Use strict test-driven development. Run:
 
 ```bash
 python -m unittest discover -s tests -v
-python -m py_compile provider.py __init__.py tests/test_provider.py tests/test_live.py
+python -m py_compile provider.py __init__.py tests/test_provider.py tests/test_live.py tests/test_hermes_e2e.py tests/hermes_e2e_runner.py
 hermes plugins doctor . --ci
 git diff --check
 ```

@@ -70,8 +70,8 @@ Remote endpoints must use HTTPS. Plain HTTP is accepted only for `localhost`, `1
 `grok_x_search` accepts:
 
 - `query` - required research request
-- `allowed_x_handles` - exclusively include up to 20 handles
-- `excluded_x_handles` - exclude up to 20 handles
+- `allowed_x_handles` - exclusively include up to 10 handles
+- `excluded_x_handles` - exclude up to 10 handles
 - `from_date` - optional `YYYY-MM-DD` start date
 - `to_date` - optional `YYYY-MM-DD` end date
 - `enable_image_understanding` - analyze images attached to matching posts
@@ -87,24 +87,22 @@ Successful calls return JSON containing:
 {
   "success": true,
   "provider": "grok-responses",
+  "credential_source": "gateway",
   "tool": "grok_x_search",
   "model": "grok-4.5",
   "answer": "...",
   "citations": [],
   "inline_citations": [],
-  "citation_urls": ["https://x.com/example/status/123"],
-  "output_types": ["reasoning", "message"],
-  "search_call_detected": false,
   "degraded": false,
   "degraded_reason": null
 }
 ```
 
-Some gateways preserve citations but omit the upstream `x_search_call` output item. `search_call_detected: false` therefore does not invalidate a citation-backed answer.
+The result intentionally mirrors native Hermes `x_search`. Treat it as citation-backed when `degraded` is false and either `citations` or `inline_citations` contains valid X post URLs. Gateway-internal output types are not exposed because they are transport diagnostics, not grounding status.
 
 Only HTTPS citation URLs on `x.com` or `twitter.com` are retained. Userinfo, nonstandard ports, and unrelated hosts are dropped.
 
-An HTTP 200 answer with no citations is returned with `degraded: true`. Treat it as unsourced model synthesis, not proof that X Search ran.
+Like native Hermes `x_search`, a filtered HTTP 200 answer with no citations is returned with `degraded: true`. Treat it as unsourced model synthesis, not proof that X Search ran. An unfiltered answer follows native behavior and is not marked degraded solely because citations are absent.
 
 ## Trust boundary
 
@@ -118,7 +116,7 @@ The plugin refuses redirects, caps response bodies and retry delays, and returns
 
 ```bash
 python -m unittest discover -s tests -v
-python -m py_compile provider.py __init__.py tests/test_provider.py tests/test_live.py
+python -m py_compile provider.py __init__.py tests/test_provider.py tests/test_live.py tests/test_hermes_e2e.py tests/hermes_e2e_runner.py
 hermes plugins doctor . --ci
 git diff --check
 ```
