@@ -102,7 +102,7 @@ The result intentionally mirrors native Hermes `x_search`. Treat it as citation-
 
 Only HTTPS citation URLs on `x.com` or `twitter.com` are retained. Userinfo, nonstandard ports, and unrelated hosts are dropped.
 
-Like native Hermes `x_search`, a filtered HTTP 200 answer with no citations is returned with `degraded: true`. Treat it as unsourced model synthesis, not proof that X Search ran. An unfiltered answer follows native behavior and is not marked degraded solely because citations are absent.
+Like native Hermes `x_search`, a filtered HTTP 200 answer with no citations is returned with `degraded: true`. Treat it as unsourced model synthesis, not proof that X Search ran. An unfiltered answer follows native behavior and is not marked degraded solely because citations are absent. If a canonical X URL in the returned citations or answer text identifies an author that conflicts with `allowed_x_handles` or `excluded_x_handles`, the plugin fails closed with `error_type: "filter_violation"`.
 
 ## Trust boundary
 
@@ -111,6 +111,8 @@ This plugin sends requests to the configured gateway. The gateway operator contr
 Domain and handle filters constrain the requested search but are not security boundaries. Verify returned URLs before fetching or acting on them.
 
 The plugin refuses redirects, caps response bodies and retry delays, and returns sanitized error categories instead of raw upstream bodies.
+
+The normalized tool result is capped at 100,000 characters, matching native Hermes tool-result limits. An upstream response without `status` is accepted, while an explicit non-`completed` status is rejected. Filter constraints are reinforced in the request instructions and checked against identifiable returned X URLs.
 
 ## Development
 

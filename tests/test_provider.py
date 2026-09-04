@@ -102,6 +102,7 @@ class PayloadTests(unittest.TestCase):
         self.assertIn("Find recent posts", prompt)
         self.assertIn("Only cite and discuss posts authored by: @OpenAI", prompt)
         self.assertIn("Do not include related or quoted accounts", prompt)
+        self.assertIn("Only cite and discuss posts authored by: @OpenAI", payload["instructions"])
 
     def test_build_payload_reinforces_excluded_handle_filter(self):
         provider = load_provider()
@@ -114,6 +115,7 @@ class PayloadTests(unittest.TestCase):
 
         prompt = payload["input"][0]["content"]
         self.assertIn("Do not cite or discuss posts authored by: @spam", prompt)
+        self.assertIn("Do not cite or discuss posts authored by: @spam", payload["instructions"])
 
     def test_build_payload_rejects_handle_prompt_injection(self):
         provider = load_provider()
@@ -356,6 +358,36 @@ class ResponseTests(unittest.TestCase):
         self.assertFalse(result["degraded"])
         self.assertIsNone(result["degraded_reason"])
 
+    def test_normalize_response_accepts_omitted_status(self):
+        provider = load_provider()
+        result = provider.normalize_response(
+            {
+                "output_text": "Found posts.",
+                "citations": ["https://x.com/OpenAI/status/1"],
+            },
+            model="grok-4.5",
+            query="test",
+        )
+
+        self.assertTrue(result["success"])
+        self.assertEqual(result["answer"], "Found posts.")
+
+    def test_normalize_response_ignores_non_answer_content_types(self):
+        provider = load_provider()
+        with self.assertRaisesRegex(ValueError, "no answer"):
+            provider.normalize_response(
+                {
+                    "output": [
+                        {
+                            "type": "message",
+                            "content": [{"type": "refusal", "text": "Not available."}],
+                        }
+                    ]
+                },
+                model="grok-4.5",
+                query="test",
+            )
+
     def test_normalize_response_does_not_count_action_sources_as_citations(self):
         provider = load_provider()
         result = provider.normalize_response(
@@ -384,6 +416,63 @@ class ResponseTests(unittest.TestCase):
             result["degraded_reason"],
             "no citations returned despite filters: allowed_x_handles",
         )
+
+    def test_normalize_response_rejects_citation_outside_allowed_handle(self):
+        provider = load_provider()
+        with self.assertRaisesRegex(ValueError, "allowed handle filter"):
+            provider.normalize_response(
+                {
+                    "status": "completed",
+                    "output_text": "Found posts.",
+                    "citations": ["https://x.com/sama/status/1"],
+                },
+                model="grok-4.5",
+                query="test",
+                allowed_x_handles=["OpenAI"],
+            )
+
+    def test_normalize_response_rejects_citation_in_excluded_handle(self):
+        provider = load_provider()
+        with self.assertRaisesRegex(ValueError, "excluded handle filter"):
+            provider.normalize_response(
+                {
+                    "status": "completed",
+                    "output_text": "Found posts.",
+                    "citations": ["https://x.com/spam/status/1"],
+                },
+                model="grok-4.5",
+                query="test",
+                excluded_x_handles=["spam"],
+            )
+
+    def test_normalize_response_rejects_disallowed_url_in_answer(self):
+        provider = load_provider()
+        with self.assertRaisesRegex(ValueError, "allowed handle filter"):
+            provider.normalize_response(
+                {
+                    "status": "completed",
+                    "output_text": "See https://x.com/sama/status/1",
+                },
+                model="grok-4.5",
+                query="test",
+                allowed_x_handles=["OpenAI"],
+            )
+
+    def test_normalize_response_allows_anonymous_i_status_citation(self):
+        provider = load_provider()
+        result = provider.normalize_response(
+            {
+                "status": "completed",
+                "output_text": "Found one post.",
+                "citations": ["https://x.com/i/status/1"],
+            },
+            model="grok-4.5",
+            query="test",
+            allowed_x_handles=["OpenAI"],
+        )
+
+        self.assertTrue(result["success"])
+        self.assertFalse(result["degraded"])
 
     def test_normalize_response_rejects_non_string_text(self):
         provider = load_provider()
@@ -514,19 +603,12 @@ class ResponseTests(unittest.TestCase):
                     model="grok-4.6",
                     query="test",
                 )
-        for missing_status in (
-            {"output_text": "partial"},
-            {"status": "", "output_text": "partial"},
-        ):
-            with (
-                self.subTest(missing_status=missing_status),
-                self.assertRaisesRegex(ValueError, "not completed"),
-            ):
-                provider.normalize_response(
-                    missing_status,
-                    model="grok-4.6",
-                    query="test",
-                )
+        with self.assertRaisesRegex(ValueError, "not completed"):
+            provider.normalize_response(
+                {"status": "", "output_text": "partial"},
+                model="grok-4.6",
+                query="test",
+            )
 
 
 class RegistrationTests(unittest.TestCase):
@@ -655,6 +737,24 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(body["tools"], [{"type": "x_search", "allowed_x_handles": ["xai"]}])
         self.assertEqual(body["reasoning"], {"effort": "low"})
         self.assertNotIn("secret-key", json.dumps(result))
+
+    def test_grok_x_search_rejects_native_oversized_result(self):
+        provider = load_provider()
+        config = {
+            "base_url": "https://gateway.example/v1",
+            "retries": 0,
+        }
+        upstream = {"status": "completed", "output_text": "x" * 100_001}
+
+        with (
+            patch.object(provider, "_load_config", return_value=config),
+            patch.object(provider, "_get_api_key", return_value="secret-key"),
+            patch.object(provider, "_open_request", return_value=FakeResponse(upstream)),
+        ):
+            result = provider.grok_x_search("find posts")
+
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error_type"], "response_too_large")
 
     def test_grok_x_search_retries_rate_limit_with_capped_delay(self):
         provider = load_provider()
