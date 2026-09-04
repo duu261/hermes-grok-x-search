@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import shutil
 import tempfile
@@ -130,6 +131,8 @@ def _run_probe(home: Path, bundled: Path) -> None:
 
 def main() -> None:
     previous_env = {key: os.environ.get(key) for key in ENV_KEYS}
+    root_logger = logging.getLogger()
+    previous_handlers = tuple(root_logger.handlers)
     try:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -145,6 +148,14 @@ def main() -> None:
             )
             _run_probe(home, bundled)
     finally:
+        for handler in tuple(root_logger.handlers):
+            if handler not in previous_handlers:
+                root_logger.removeHandler(handler)
+                handler.close()
+        for handler in tuple(root_logger.handlers):
+            root_logger.removeHandler(handler)
+        for handler in previous_handlers:
+            root_logger.addHandler(handler)
         for key, value in previous_env.items():
             if value is None:
                 os.environ.pop(key, None)
