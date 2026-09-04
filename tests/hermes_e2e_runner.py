@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -129,10 +130,8 @@ def _run_probe(home: Path, bundled: Path) -> None:
         assert registry.snapshot_registration("grok_x_search", scope=str(home)) is None
 
 
-def main() -> None:
+def _run_child() -> None:
     previous_env = {key: os.environ.get(key) for key in ENV_KEYS}
-    root_logger = logging.getLogger()
-    previous_handlers = tuple(root_logger.handlers)
     try:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -148,14 +147,6 @@ def main() -> None:
             )
             _run_probe(home, bundled)
     finally:
-        for handler in tuple(root_logger.handlers):
-            if handler not in previous_handlers:
-                root_logger.removeHandler(handler)
-                handler.close()
-        for handler in tuple(root_logger.handlers):
-            root_logger.removeHandler(handler)
-        for handler in previous_handlers:
-            root_logger.addHandler(handler)
         for key, value in previous_env.items():
             if value is None:
                 os.environ.pop(key, None)
@@ -163,5 +154,31 @@ def main() -> None:
                 os.environ[key] = value
 
 
+def main() -> None:
+    """Run the Hermes probe in a disposable process.
+
+    Hermes logging uses a process-global queue listener and file handlers, so
+    an in-process temporary ``HERMES_HOME`` cannot be cleaned safely by this
+    plugin test. Process isolation makes registry, logging, and module state
+    teardown automatic while still exercising the real Hermes runtime.
+    """
+    child_env = os.environ.copy()
+    child_env["PYTHONPATH"] = os.pathsep.join(dict.fromkeys([str(REPO), *sys.path]))
+    completed = subprocess.run(
+        [sys.executable, str(Path(__file__)), "--child"],
+        cwd=REPO,
+        env=child_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(f"Hermes E2E child failed with exit code {completed.returncode}")
+
+
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) == 2 and sys.argv[1] == "--child":
+        _run_child()
+    else:
+        main()
