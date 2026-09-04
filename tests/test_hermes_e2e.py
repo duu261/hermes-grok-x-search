@@ -9,6 +9,7 @@ except ImportError:
 class HermesRuntimeE2ETest(unittest.TestCase):
     def test_real_hermes_tool_executor_returns_native_shape(self):
         main()
+        main()
 
 
 if __name__ == "__main__":
