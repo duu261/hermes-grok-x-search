@@ -34,9 +34,10 @@ class GrokXSearchLiveTests(unittest.TestCase):
 
         with patch.object(provider, "_load_config", return_value=config):
             result = provider.grok_x_search(
-                "Find one recent public post from @xai about Grok. "
-                "Return its exact x.com status URL.",
-                allowed_x_handles=["xai"],
+                "Find the latest official posts by @OpenAI about Astra on X. "
+                "Return exact canonical x.com status URLs and dates. Do not include "
+                "posts from any other account.",
+                allowed_x_handles=["OpenAI"],
             )
 
         self.assertTrue(result.get("success"), result.get("error_type"))

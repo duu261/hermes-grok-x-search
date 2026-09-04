@@ -20,9 +20,15 @@ LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "::1"}
 DEFAULT_MODEL = "grok-4.5"
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
+MAX_RESULT_CHARS = 100_000
 SAFE_REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,200}$")
 STRICT_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 X_CITATION_HOSTS = {"x.com", "www.x.com", "twitter.com", "www.twitter.com"}
+X_URL_PATTERN = re.compile(r"https://(?:www\.)?(?:x\.com|twitter\.com)/[^\s)\]>]+")
+
+
+class _FilterViolationError(ValueError):
+    """The gateway returned evidence conflicting with a caller filter."""
 
 
 def _load_config() -> dict[str, Any]:
@@ -174,6 +180,7 @@ def build_payload(
         tool["enable_video_understanding"] = True
 
     prompt = query
+    handles = ""
     if allowed:
         handles = ", ".join(f"@{handle}" for handle in allowed)
         prompt += (
@@ -192,6 +199,15 @@ def build_payload(
         "tools": [tool],
         "store": False,
     }
+    if allowed:
+        payload["instructions"] = (
+            f"Only cite and discuss posts authored by: {handles}. "
+            "Do not include related or quoted accounts."
+        )
+    elif excluded:
+        payload["instructions"] = (
+            f"Do not cite or discuss posts authored by: {handles}."
+        )
     if effort:
         payload["reasoning"] = {"effort": effort}
     return payload
@@ -258,6 +274,8 @@ def _response_text(data: dict[str, Any]) -> str:
         for content in _array(item.get("content"), "message content"):
             if not isinstance(content, dict):
                 continue
+            if content.get("type") not in {"output_text", "text"}:
+                continue
             text_value = content.get("text")
             if text_value is not None and not isinstance(text_value, str):
                 raise TypeError("upstream content text is not a string")
@@ -273,6 +291,8 @@ def normalize_response(
     model: str,
     query: str,
     active_filters: list[str] | None = None,
+    allowed_x_handles: list[str] | None = None,
+    excluded_x_handles: list[str] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise TypeError("upstream response is not an object")
@@ -281,7 +301,7 @@ def normalize_response(
     status = data.get("status")
     if status is not None and not isinstance(status, str):
         raise TypeError("upstream status is not a string")
-    if status != "completed":
+    if status is not None and status != "completed":
         raise ValueError("upstream response is not completed")
     output = _array(data.get("output"), "output")
     citations_value = _array(data.get("citations"), "citations")
@@ -339,6 +359,29 @@ def normalize_response(
                             "end_index": _optional_index(annotation.get("end_index")),
                         }
                     )
+
+    allowed_handles = {
+        str(handle).strip().lstrip("@").lower() for handle in (allowed_x_handles or [])
+    }
+    excluded_handles = {
+        str(handle).strip().lstrip("@").lower() for handle in (excluded_x_handles or [])
+    }
+    filter_urls = list(urls)
+    for raw_url in X_URL_PATTERN.findall(answer):
+        url = _valid_url(raw_url.rstrip(".,;:"))
+        if url:
+            filter_urls.append(url)
+    for url in filter_urls:
+        path_parts = [part for part in urlparse(url).path.split("/") if part]
+        if len(path_parts) < 3 or path_parts[1] != "status":
+            continue
+        author = path_parts[0].lower()
+        if author == "i":
+            continue
+        if allowed_handles and author not in allowed_handles:
+            raise _FilterViolationError("citation violates allowed handle filter")
+        if excluded_handles and author in excluded_handles:
+            raise _FilterViolationError("citation violates excluded handle filter")
 
     filters = active_filters or []
     degraded = bool(filters) and not bool(urls)
@@ -457,7 +500,7 @@ def grok_x_search(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "Hermes-Grok-X-Search/0.1.0",
+            "User-Agent": "Hermes-Grok-X-Search/0.1.3",
         },
         method="POST",
     )
@@ -509,11 +552,20 @@ def grok_x_search(
                     model=model,
                     query=str(query or "").strip(),
                     active_filters=active_filters,
+                    allowed_x_handles=allowed_x_handles,
+                    excluded_x_handles=excluded_x_handles,
                 )
+            except _FilterViolationError as exc:
+                return _failure("filter_violation", str(exc), request_id=request_id)
             except (TypeError, ValueError) as exc:
                 return _failure("malformed_response", str(exc), request_id=request_id)
             if request_id:
                 result["request_id"] = request_id
+            if len(json.dumps(result, ensure_ascii=False)) > MAX_RESULT_CHARS:
+                return _failure(
+                    "response_too_large",
+                    "normalized result exceeded configured size limit",
+                )
             return result
         except urllib.error.HTTPError as exc:
             status_code = int(exc.code)

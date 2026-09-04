@@ -26,9 +26,12 @@ Version 0.1 scope is locked to xAI server-side `x_search` only. Do not add gener
 - Cap response size and retry delay. Retry only transient HTTP failures.
 - Keep the model-facing result aligned with native Hermes `x_search`; do not expose gateway-internal output types or search-call detector flags.
 - A citation-backed answer is valid when `degraded` is false and either `citations` or `inline_citations` contains validated X URLs.
+- Validate identifiable authors in citation fields and answer URLs against handle filters and fail closed with `filter_violation` when the gateway returns conflicting evidence.
 - Retain only HTTPS citation URLs on `x.com` or `twitter.com`; never return userinfo or arbitrary hosts.
 - Match native degraded semantics: only filtered answers without citations are marked `degraded: true`.
 - HTTP 200 error envelopes and empty answers are failures.
+- Accept omitted upstream `status` like native Hermes; reject explicit non-completed statuses.
+- Keep normalized results at or below native's 100,000-character limit.
 - Keep tool name `grok_x_search` to avoid overriding Hermes core `x_search`.
 
 ## Development
