@@ -453,6 +453,30 @@ class RegistrationTests(unittest.TestCase):
 
 
 class TransportTests(unittest.TestCase):
+    def test_grok_x_search_mirrors_native_defaults(self):
+        provider = load_provider()
+        upstream = {
+            "status": "completed",
+            "citations": ["https://x.com/xai/status/1"],
+            "output_text": "Result",
+        }
+        config = {
+            "base_url": "https://gateway.example/v1",
+            "retries": 0,
+        }
+
+        with (
+            patch.object(provider, "_load_config", return_value=config),
+            patch.object(provider, "_get_api_key", return_value="secret-key"),
+            patch.object(provider, "_open_request", return_value=FakeResponse(upstream)) as opened,
+        ):
+            result = provider.grok_x_search("find posts")
+
+        self.assertTrue(result["success"])
+        body = json.loads(opened.call_args.args[0].data)
+        self.assertEqual(body["model"], "grok-4.5")
+        self.assertNotIn("reasoning", body)
+
     def test_grok_x_search_sends_responses_request_and_normalizes_result(self):
         provider = load_provider()
         upstream = {

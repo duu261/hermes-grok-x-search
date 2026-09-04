@@ -46,7 +46,7 @@ Set non-secret behavior through Hermes config:
 
 ```bash
 hermes config set grok_x_search.base_url https://gateway.example/v1
-hermes config set grok_x_search.model grok-4.6
+hermes config set grok_x_search.model grok-4.5
 ```
 
 Optional settings:
@@ -54,8 +54,8 @@ Optional settings:
 ```yaml
 grok_x_search:
   base_url: https://gateway.example/v1
-  model: grok-4.6
-  reasoning_effort: low
+  model: grok-4.5
+  reasoning_effort: null
   timeout_seconds: 180
   retries: 1
   retry_base_seconds: 1.5
@@ -88,7 +88,7 @@ Successful calls return JSON containing:
   "success": true,
   "provider": "grok-responses",
   "tool": "grok_x_search",
-  "model": "grok-4.6",
+  "model": "grok-4.5",
   "answer": "...",
   "citations": [],
   "inline_citations": [],
