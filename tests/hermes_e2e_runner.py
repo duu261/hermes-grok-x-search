@@ -174,7 +174,10 @@ def main() -> None:
         check=False,
     )
     if completed.returncode != 0:
-        raise RuntimeError(f"Hermes E2E child failed with exit code {completed.returncode}")
+        details = "\n".join(part for part in (completed.stdout, completed.stderr) if part)
+        raise RuntimeError(
+            f"Hermes E2E child failed with exit code {completed.returncode}:\n{details}"
+        )
 
 
 if __name__ == "__main__":
