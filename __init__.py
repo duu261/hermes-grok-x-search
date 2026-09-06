@@ -9,8 +9,8 @@ from .provider import _get_api_key, _load_config, grok_x_search, responses_endpo
 GROK_X_SEARCH_SCHEMA = {
     "name": "grok_x_search",
     "description": (
-        "Search public X posts, profiles, and threads through a pooled Grok "
-        "Responses gateway. Returns a synthesized answer plus citations and "
+        "Search public X posts, profiles, and threads. Returns a synthesized "
+        "answer plus citations and "
         "inline_citations. Treat the result as X-grounded when degraded is false "
         "and either citation field contains valid X post URLs. Read-only discovery "
         "only; never use for posting, replies, likes, DMs, or other authenticated "
