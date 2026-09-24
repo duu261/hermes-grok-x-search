@@ -710,7 +710,7 @@ class TransportTests(unittest.TestCase):
 
         self.assertTrue(result["success"])
         body = json.loads(opened.call_args.args[0].data)
-        self.assertEqual(body["model"], "grok-4.5")
+        self.assertEqual(body["model"], "grok-4.6")
         self.assertNotIn("reasoning", body)
 
     def test_grok_x_search_sends_responses_request_and_normalizes_result(self):

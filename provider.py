@@ -17,7 +17,7 @@ MAX_HANDLES = 10
 HANDLE_PATTERN = re.compile(r"^[A-Za-z0-9_]{1,15}$")
 REASONING_EFFORTS = {"low", "medium", "high", "xhigh"}
 LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "::1"}
-DEFAULT_MODEL = "grok-4.5"
+DEFAULT_MODEL = "grok-4.6"
 DEFAULT_TIMEOUT_SECONDS = 180
 DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 MAX_RESULT_CHARS = 100_000
@@ -496,7 +496,7 @@ def grok_x_search(
         headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "User-Agent": "Hermes-Grok-X-Search/0.1.6",
+            "User-Agent": "Hermes-Grok-X-Search/0.1.7",
         },
         method="POST",
     )
