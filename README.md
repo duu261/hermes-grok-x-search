@@ -1,5 +1,7 @@
 # Hermes Grok X Search
 
+English | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md)
+
 A standalone Hermes Agent plugin that exposes xAI's server-side X Search as one model-facing tool, `grok_x_search`, through an operator-configured Responses-compatible gateway.
 
 ```text
